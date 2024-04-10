@@ -144,6 +144,7 @@ class audio_class:
                              output=True,
                              frames_per_buffer=self.CHUNK)
 
+
         print("Playing...")
         data = wf.readframes(self.CHUNK)
         while data:
