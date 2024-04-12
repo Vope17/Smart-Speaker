@@ -9,17 +9,12 @@ import speech_recognition as sr
 import jieba
 from pypinyin import pinyin
 
+
 def led_status(arg):
     led = RGBLED(22, 23, 27)
-    shutdown = False # origin is true to breathing led
+    shutdown = True
     i, j = 0, 0
     status = ""
-
-    # listen name to print led color
-    if arg == "Jay":
-        led.color = (0,255,0)
-    elif arg == "Lin":
-        led.color = (0,0,255)
 
     # led breathing
     while shutdown:
@@ -32,10 +27,12 @@ def led_status(arg):
 
         if action_list[0] == 'wait':
             led.color = (i / 100, 0, 0)
-        elif action_list[0] == 'record':
+        elif action_list[0] == 'Jay':
             led.color = (0, i / 100, 0)
-        elif action_list[0] == 'play':
+        elif action_list[0] == 'Lin':
             led.color = (0, 0, i / 100)
+        elif action_list[0] == 'stop':
+            led.color = (0, i / 100, i / 100)
         else:
             led.color = (i / 100, 0, 0)
 
@@ -70,7 +67,7 @@ class audio_class:
         self.str_VoiceToText = ""
         self.str_CuttedText = ""
         self.d2list_TextToPinyin = []
-        self.clickBox = False
+        self.Name = ""
 
     def SpeechToText(self):
         r = sr.Recognizer()
@@ -94,11 +91,8 @@ class audio_class:
         for key in dict_singers:
             if ''.join(dict_singers[key]) in cmp_str:
                 self.wave_path = f"./{key}.wav"
+                self.Name = key
                 print(f"Playing {key} Song...")
-                if key == "Jay":
-                    led_status(key)
-                elif key == "Lin":
-                    led_status(key)
                 return
 
         print("fail")
@@ -117,7 +111,7 @@ class audio_class:
             data = stream.read(self.CHUNK)
             frames.append(data)
         print("Finished recording")
-
+        print(self.wave_path)
         with wave.open(self.wave_path, 'wb') as wf:
             wf.setnchannels(self.CHANNELS)
             wf.setsampwidth(self.p.get_sample_size(self.FORMAT))
@@ -136,7 +130,6 @@ class audio_class:
         self.SelectSong(d2list_Pinyin)
 
     def play_audio(self):
-
         wf = wave.open(self.wave_path, 'rb')
         stream = self.p.open(format=self.p.get_format_from_width(wf.getsampwidth()),
                              channels=wf.getnchannels(),
@@ -144,23 +137,16 @@ class audio_class:
                              output=True,
                              frames_per_buffer=self.CHUNK)
 
-
         print("Playing...")
+
         data = wf.readframes(self.CHUNK)
         while data:
             stream.write(data)
             data = wf.readframes(self.CHUNK)
-            # 增加click中斷音樂
-            if self.clickBox:
-                print("中斷音樂播放")
+            if GPIO.input(24):
                 stream.close()
-
         print("finished playing")
-
         stream.close()
-
-    def clickFunc(self):
-        self.clickBox = True
 
     def cleanup(self):
         self.p.terminate()
@@ -168,39 +154,27 @@ class audio_class:
 
 def main():
     action = "wait:0.03"
-    # shutdown = True
+    shutdown = True
     GPIO.setmode(GPIO.BCM)
-
-
     GPIO.setup(24, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-
-    #breathing led
-    # t = threading.Thread(target=led_status, args=(lambda: (action, shutdown),))
-    # t.start()
+    t = threading.Thread(target=led_status, args=(lambda: (action, shutdown),))
+    t.start()
 
     recorder = audio_class()
-    print('''
-    ================================================================
-    開始錄音
-    ================================================================
-    ''')
-    # 待機錄音
-    #action for breathing led
-    # action = "record:0.005"
-    recorder.record_audio()
-    # action = "play:0.005"
-    recorder.play_audio()
-    # action = "wait:0.03"
 
     try:
         while True:
-            if GPIO.input(24) == True:
-                recorder.clickFunc()
+            recorder.record_audio()
+            if recorder.Name == "Jay":
+                action = "Jay:0.03"
+            elif recorder.Name == "Lin":
+                action = "Lin:0.03"
+            recorder.play_audio()
 
     except KeyboardInterrupt:
         shutdown = False
         print("close")
-        # t.join()
+        t.join()
     # break
     except Exception as e:
         print(e)
@@ -210,7 +184,7 @@ def main():
         shutdown = False
         recorder.cleanup()
         GPIO.cleanup(24)
-        # t.join()
+        t.join()
 
 
 if __name__ == '__main__':
